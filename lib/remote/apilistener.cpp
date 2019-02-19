@@ -541,7 +541,7 @@ void ApiListener::NewClientHandlerInternal(boost::asio::yield_context yc, const 
 			verifyError = msgbuf.str();
 		}
 
-		return preverified;
+		return true;
 	});
 
 	if (role == RoleClient) {
