@@ -7,6 +7,7 @@
 #include "remote/jsonrpc.hpp"
 #include "remote/apifunction.hpp"
 #include "base/convert.hpp"
+#include "base/defer.hpp"
 #include "base/io-engine.hpp"
 #include "base/netstring.hpp"
 #include "base/json.hpp"
@@ -566,6 +567,18 @@ void ApiListener::NewClientHandlerInternal(boost::asio::yield_context yc, const 
 		return;
 	}
 
+	bool willBeShutDown = false;
+
+	Defer shutDownIfNeeded ([&sslConn, &willBeShutDown, &yc]() {
+		if (!willBeShutDown) {
+			try {
+				sslConn.async_shutdown(yc);
+			} catch (...) {
+				// https://stackoverflow.com/questions/130117/throwing-exceptions-out-of-a-destructor
+			}
+		}
+	});
+
 	std::shared_ptr<X509> cert (SSL_get_peer_certificate(sslConn.native_handle()), X509_free);
 	String identity;
 	Endpoint::Ptr endpoint;
@@ -680,6 +693,8 @@ void ApiListener::NewClientHandlerInternal(boost::asio::yield_context yc, const 
 
 		if (aclient) {
 			aclient->Start();
+
+			willBeShutDown = true;
 		}
 	} else {
 		Log(LogNotice, "ApiListener", "New HTTP client");
@@ -687,6 +702,8 @@ void ApiListener::NewClientHandlerInternal(boost::asio::yield_context yc, const 
 		HttpServerConnection::Ptr aclient = new HttpServerConnection(identity, verify_ok, client);
 		AddHttpClient(aclient);
 		aclient->Start();
+
+		willBeShutDown = true;
 	}
 }
 
